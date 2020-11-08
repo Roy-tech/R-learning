@@ -1,0 +1,79 @@
+---
+title: "Winsorizing and Trimming"
+output: html_notebook
+---
+
+```{r load-packages}
+library(pacman)
+
+pacman::p_load(data.table, fixest, DescTools, magrittr)
+set.seed(1)
+
+```
+
+   
+# Basic Idea of Winsorizing 
+
+```{r data}
+# Create Dataset 
+DT <-  as.data.frame(replicate(100, 1:100)) %>% setDT()
+
+# Find values at the the 2nd and 98th percentile of V1
+pct_2 <- quantile(DT$V1, c(0.02, 0.98), type = 1)
+
+DT <- DT %>%
+   .[V1 <= pct_2[1], V1 := pct_2[1]] %>%      # Replace value of V1 to 2% percentile if value is less than the 2% percentile
+   .[V1 >= pct_2[2], V1 := pct_2[2]]          # Replace value of V1 to 98% percentile if value is greater than the 98% percentile 
+
+```
+
+# Basic Idea of Trimming 
+
+```{r fixest}
+
+DT <- DT %>%
+   .[V1 <= pct_2[1], V1 := NA] %>%       # Replace value of V1 to NA if value is less than the 2% percentile
+   .[V2 >= pct_2[2], V1 := NA]           # Replace value of V1 to NA if value is greater than the 98% percentile 
+
+DT <- DT %>%
+   .[!(V1 <= pct_2[1])] %>%       # Drop observation if value of V1 is less than the 2% percentile
+   .[!(V2 >= pct_2[2])]           # Drop observation if value of V1 to 98% percentile if value is greater than the 98% percentile 
+
+```
+
+# Winsorizing Many Variables at Once 
+
+```{r Winsorize-Many}
+winz_var <- c("V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8")
+winz_var <- sprintf("V%s",seq(1:99))
+
+DT <- DT %>%
+   .[,(winz_var) := lapply(.SD, Winsorize, probs = c(0.02, 0.98),  na.rm = TRUE, type = 1), .SDcols = winz_var]
+
+```
+
+# Trimming Many Variables at Once 
+
+```{r Trim-Many}
+Trim_vars <- function (x, minval = NULL, maxval = NULL, probs = c(0.05, 0.95), 
+    na.rm = FALSE, type = 7) 
+{
+    if (is.null(minval) || is.null(maxval)) {
+        xq <- quantile(x = x, probs = probs, na.rm = na.rm, type = type)
+        if (is.null(minval)) 
+            minval <- xq[1L]
+        if (is.null(maxval)) 
+            maxval <- xq[2L]
+    }
+    x[x <= minval] <- NA
+    x[x >= maxval] <- NA
+    return(x)
+}
+
+trim_vars <- c("V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8")
+trim_vars <- sprintf("V%s",seq(1:99))
+
+DT <- DT %>%
+   .[,(trim_vars) := lapply(.SD, Trim_vars, probs = c(0.02, 0.98),  na.rm = TRUE, type = 1), .SDcols = trim_vars]
+
+```
